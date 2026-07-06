@@ -29,41 +29,55 @@ Spring Boot Starter for connecting to multiple Redis instances/clusters from a s
 
 ```yaml
 spring:
+  main:
+    web-application-type: none
   data:
     redis:
-      auto-register: true          # Enable auto-register mode (default: false)
+      auto-register: true
       clusters:
-        # Standalone mode
-        order:
+        # Standalone mode example
+        order:    # 集群名 → 生成 orderRedisTemplate
           host: localhost
           port: 6379
-          password: order-pass
-          database: 0
-          timeout: 3s
           lettuce:
             pool:
               max-active: 16
               max-idle: 8
               min-idle: 2
-        user:
+        user:    # 集群名 → 生成 userRedisTemplate
           host: localhost
           port: 6380
-          password: user-pass
-          database: 0
           lettuce:
             pool:
               max-active: 8
               max-idle: 4
               min-idle: 1
-        # Redis Cluster mode
-        cache:
+        # Redis Cluster mode example
+        cache:    # 集群名 → 生成 cacheRedisTemplate
           cluster:
             nodes:
               - localhost:7001
               - localhost:7002
               - localhost:7003
             max-redirects: 3
-          password: cache-pass
+          timeout: 5000ms
+          lettuce:
+            pool:
+              max-active: 16
+              max-idle: 8
+              min-idle: 2
+              max-wait: 10000ms
+            cluster:
+              refresh:
+                adaptive: true
+                period: 2000ms
+        session: # 集群名 → 生成 sessionRedisTemplate
+          cluster:
+            nodes:
+              - localhost:7011
+              - localhost:7012
+              - localhost:7013
+            max-redirects: 3
           timeout: 5000ms
           lettuce:
             pool:
