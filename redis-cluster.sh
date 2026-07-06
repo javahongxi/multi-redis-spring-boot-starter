@@ -12,18 +12,20 @@
 
 BASE_DIR="/tmp/redis-cluster"
 
-# Cluster configurations: name=ports
-declare -A CLUSTER_CONFIGS=(
-    ["cache"]="7001 7002 7003"
-    ["session"]="7011 7012 7013"
-)
+# All cluster names
+ALL_CLUSTERS="cache session"
 
+# Cluster configurations: name -> ports
 get_ports() {
     local name="$1"
     if [ -z "$name" ]; then
         name="cache"
     fi
-    echo "${CLUSTER_CONFIGS[$name]}"
+    case "$name" in
+        cache)   echo "7001 7002 7003" ;;
+        session) echo "7011 7012 7013" ;;
+        *)       echo "" ;;
+    esac
 }
 
 start_cluster() {
@@ -33,7 +35,7 @@ start_cluster() {
 
     if [ -z "$ports_str" ]; then
         echo "[ERROR] Unknown cluster: $name"
-        echo "Available clusters: ${!CLUSTER_CONFIGS[*]}"
+        echo "Available clusters: $ALL_CLUSTERS"
         return 1
     fi
 
@@ -127,7 +129,7 @@ status_cluster() {
 start() {
     local name="$1"
     if [ -z "$name" ] || [ "$name" = "all" ]; then
-        for cluster_name in "${!CLUSTER_CONFIGS[@]}"; do
+        for cluster_name in $ALL_CLUSTERS; do
             start_cluster "$cluster_name"
         done
     else
@@ -138,7 +140,7 @@ start() {
 stop() {
     local name="$1"
     if [ "$name" = "all" ] || [ -z "$name" ]; then
-        for cluster_name in "${!CLUSTER_CONFIGS[@]}"; do
+        for cluster_name in $ALL_CLUSTERS; do
             stop_cluster "$cluster_name"
         done
     else
@@ -154,7 +156,7 @@ status() {
     echo "=============================="
     echo ""
     if [ -z "$name" ] || [ "$name" = "all" ]; then
-        for cluster_name in "${!CLUSTER_CONFIGS[@]}"; do
+        for cluster_name in $ALL_CLUSTERS; do
             status_cluster "$cluster_name"
         done
     else
@@ -181,8 +183,8 @@ case "$1" in
         echo "Usage: $0 {start|stop|status|restart} [cluster_name|all]"
         echo ""
         echo "Available clusters:"
-        for name in "${!CLUSTER_CONFIGS[@]}"; do
-            echo "  $name -> ports: ${CLUSTER_CONFIGS[$name]}"
+        for name in $ALL_CLUSTERS; do
+            echo "  $name -> ports: $(get_ports $name)"
         done
         echo ""
         echo "Examples:"
