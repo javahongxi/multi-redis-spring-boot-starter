@@ -4,6 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -11,7 +12,7 @@ import java.util.Map;
  *
  * @author javahongxi
  */
-@ConfigurationProperties(prefix = "spring.redis")
+@ConfigurationProperties(prefix = "spring.data.redis")
 public class MultiRedisProperties {
 
     /**
@@ -46,6 +47,7 @@ public class MultiRedisProperties {
         private String password;
         private int database = 0;
         private Duration timeout;
+        private ClusterConfig cluster = new ClusterConfig();
         private Lettuce lettuce = new Lettuce();
 
         public String getHost() { return host; }
@@ -63,16 +65,71 @@ public class MultiRedisProperties {
         public Duration getTimeout() { return timeout; }
         public void setTimeout(Duration timeout) { this.timeout = timeout; }
 
+        public ClusterConfig getCluster() { return cluster; }
+        public void setCluster(ClusterConfig cluster) { this.cluster = cluster; }
+
         public Lettuce getLettuce() { return lettuce; }
         public void setLettuce(Lettuce lettuce) { this.lettuce = lettuce; }
+
+        /**
+         * Check if this is a Redis Cluster mode (nodes configured).
+         */
+        public boolean isClusterMode() {
+            return cluster != null && cluster.getNodes() != null && !cluster.getNodes().isEmpty();
+        }
+    }
+
+    /**
+     * Redis Cluster configuration (spring.data.redis.clusters.{name}.cluster.*).
+     */
+    public static class ClusterConfig {
+
+        private List<String> nodes;
+        private Integer maxRedirects;
+
+        public List<String> getNodes() { return nodes; }
+        public void setNodes(List<String> nodes) { this.nodes = nodes; }
+
+        public Integer getMaxRedirects() { return maxRedirects; }
+        public void setMaxRedirects(Integer maxRedirects) { this.maxRedirects = maxRedirects; }
     }
 
     public static class Lettuce {
 
         private Pool pool;
+        private LettuceCluster cluster;
 
         public Pool getPool() { return pool; }
         public void setPool(Pool pool) { this.pool = pool; }
+
+        public LettuceCluster getCluster() { return cluster; }
+        public void setCluster(LettuceCluster cluster) { this.cluster = cluster; }
+    }
+
+    /**
+     * Lettuce cluster-specific configuration (spring.data.redis.clusters.{name}.lettuce.cluster.*).
+     */
+    public static class LettuceCluster {
+
+        private Refresh refresh = new Refresh();
+
+        public Refresh getRefresh() { return refresh; }
+        public void setRefresh(Refresh refresh) { this.refresh = refresh; }
+    }
+
+    /**
+     * Cluster topology refresh configuration.
+     */
+    public static class Refresh {
+
+        private boolean adaptive = false;
+        private Duration period;
+
+        public boolean isAdaptive() { return adaptive; }
+        public void setAdaptive(boolean adaptive) { this.adaptive = adaptive; }
+
+        public Duration getPeriod() { return period; }
+        public void setPeriod(Duration period) { this.period = period; }
     }
 
     public static class Pool {

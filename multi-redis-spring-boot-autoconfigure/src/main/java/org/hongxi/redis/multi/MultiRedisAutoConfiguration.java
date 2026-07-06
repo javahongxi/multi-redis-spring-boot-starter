@@ -2,6 +2,7 @@ package org.hongxi.redis.multi;
 
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
@@ -12,7 +13,7 @@ import org.springframework.context.annotation.Import;
  * <b>Builder mode</b> (default): Inject {@link RedisTemplateBuilder} to create
  * {@code RedisTemplate} instances manually.
  * <p>
- * <b>Auto-register mode</b>: Set {@code spring.redis.auto-register=true} to
+ * <b>Auto-register mode</b>: Set {@code spring.data.redis.auto-register=true} to
  * automatically register {@code RedisTemplate} beans for each cluster.
  *
  * @author javahongxi
@@ -24,6 +25,7 @@ public class MultiRedisAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    @ConditionalOnProperty(name = "spring.data.redis.auto-register", havingValue = "false", matchIfMissing = true)
     public RedisTemplateBuilder redisTemplateBuilder(MultiRedisProperties properties) {
         return new RedisTemplateBuilder(properties);
     }
