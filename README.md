@@ -118,3 +118,5 @@ multi-redis-spring-boot-starter/
 ## License
 
 Apache License 2.0
+
+&copy; [hongxi.org](http://hongxi.org)
