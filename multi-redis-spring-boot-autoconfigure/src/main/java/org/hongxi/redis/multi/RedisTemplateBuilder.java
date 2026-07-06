@@ -1,5 +1,7 @@
 package org.hongxi.redis.multi;
 
+import io.lettuce.core.ReadFrom;
+import io.lettuce.core.RedisURI;
 import io.lettuce.core.api.StatefulConnection;
 import io.lettuce.core.cluster.ClusterClientOptions;
 import io.lettuce.core.cluster.ClusterTopologyRefreshOptions;
@@ -75,15 +77,34 @@ public class RedisTemplateBuilder {
 
     private LettuceConnectionFactory createConnectionFactory(MultiRedisProperties.Cluster cluster) {
         LettuceConnectionFactory factory;
-        if (cluster.isClusterMode()) {
+
+        // URL mode: parse RedisURI and extract connection details
+        if (cluster.getUrl() != null && !cluster.getUrl().isEmpty()) {
+            RedisURI redisURI = RedisURI.create(cluster.getUrl());
+            if (cluster.isClusterMode()) {
+                // URL + cluster mode: use nodes from cluster config, auth from URL
+                RedisClusterConfiguration clusterConfig = new RedisClusterConfiguration(cluster.getCluster().getNodes());
+                if (cluster.getCluster().getMaxRedirects() != null) {
+                    clusterConfig.setMaxRedirects(cluster.getCluster().getMaxRedirects());
+                }
+                applyAuthFromURI(clusterConfig, redisURI, cluster);
+                factory = buildClusterConnectionFactory(clusterConfig, cluster);
+            } else {
+                // URL + standalone mode: extract all from URL
+                RedisStandaloneConfiguration config = new RedisStandaloneConfiguration();
+                config.setHostName(redisURI.getHost());
+                config.setPort(redisURI.getPort());
+                config.setDatabase(redisURI.getDatabase());
+                applyAuthFromURI(config, redisURI, cluster);
+                factory = buildStandaloneConnectionFactory(config, cluster);
+            }
+        } else if (cluster.isClusterMode()) {
             // Redis Cluster mode
             RedisClusterConfiguration clusterConfig = new RedisClusterConfiguration(cluster.getCluster().getNodes());
             if (cluster.getCluster().getMaxRedirects() != null) {
                 clusterConfig.setMaxRedirects(cluster.getCluster().getMaxRedirects());
             }
-            if (cluster.getPassword() != null && !cluster.getPassword().isEmpty()) {
-                clusterConfig.setPassword(cluster.getPassword());
-            }
+            applyAuth(clusterConfig, cluster);
             factory = buildClusterConnectionFactory(clusterConfig, cluster);
         } else {
             // Standalone mode
@@ -91,39 +112,85 @@ public class RedisTemplateBuilder {
             config.setHostName(cluster.getHost());
             config.setPort(cluster.getPort());
             config.setDatabase(cluster.getDatabase());
-            if (cluster.getPassword() != null && !cluster.getPassword().isEmpty()) {
-                config.setPassword(cluster.getPassword());
-            }
+            applyAuth(config, cluster);
             factory = buildStandaloneConnectionFactory(config, cluster);
         }
         factory.afterPropertiesSet();
         return factory;
     }
 
+    private void applyAuth(RedisClusterConfiguration clusterConfig, MultiRedisProperties.Cluster cluster) {
+        if (cluster.getUsername() != null && !cluster.getUsername().isEmpty()) {
+            clusterConfig.setUsername(cluster.getUsername());
+        }
+        if (cluster.getPassword() != null && !cluster.getPassword().isEmpty()) {
+            clusterConfig.setPassword(cluster.getPassword());
+        }
+    }
+
+    private void applyAuth(RedisStandaloneConfiguration config, MultiRedisProperties.Cluster cluster) {
+        if (cluster.getUsername() != null && !cluster.getUsername().isEmpty()) {
+            config.setUsername(cluster.getUsername());
+        }
+        if (cluster.getPassword() != null && !cluster.getPassword().isEmpty()) {
+            config.setPassword(cluster.getPassword());
+        }
+    }
+
+    private void applyAuthFromURI(RedisClusterConfiguration clusterConfig, RedisURI redisURI, MultiRedisProperties.Cluster cluster) {
+        // URL credentials take precedence over explicit config only if explicit config is not set
+        if (cluster.getUsername() != null) {
+            clusterConfig.setUsername(cluster.getUsername());
+        } else if (redisURI.getUsername() != null && !redisURI.getUsername().isEmpty()) {
+            clusterConfig.setUsername(redisURI.getUsername());
+        }
+        if (cluster.getPassword() != null && !cluster.getPassword().isEmpty()) {
+            clusterConfig.setPassword(cluster.getPassword());
+        } else if (redisURI.getPassword() != null && redisURI.getPassword().length > 0) {
+            clusterConfig.setPassword(new String(redisURI.getPassword()));
+        }
+    }
+
+    private void applyAuthFromURI(RedisStandaloneConfiguration config, RedisURI redisURI, MultiRedisProperties.Cluster cluster) {
+        if (cluster.getUsername() != null) {
+            config.setUsername(cluster.getUsername());
+        } else if (redisURI.getUsername() != null && !redisURI.getUsername().isEmpty()) {
+            config.setUsername(redisURI.getUsername());
+        }
+        if (cluster.getPassword() != null && !cluster.getPassword().isEmpty()) {
+            config.setPassword(cluster.getPassword());
+        } else if (redisURI.getPassword() != null && redisURI.getPassword().length > 0) {
+            config.setPassword(new String(redisURI.getPassword()));
+        }
+    }
+
     private LettuceConnectionFactory buildClusterConnectionFactory(
             RedisClusterConfiguration clusterConfig, MultiRedisProperties.Cluster cluster) {
         ClusterTopologyRefreshOptions topologyRefreshOptions = buildClusterTopologyRefreshOptions(cluster);
         MultiRedisProperties.Pool pool = resolvePoolConfig(cluster);
+        ReadFrom readFrom = cluster.getCluster().getReadFrom();
 
         if (pool != null) {
             GenericObjectPoolConfig<StatefulConnection<?, ?>> poolConfig = buildPoolConfig(pool);
             LettucePoolingClientConfiguration.LettucePoolingClientConfigurationBuilder builder =
                     LettucePoolingClientConfiguration.builder().poolConfig(poolConfig);
-            if (cluster.getTimeout() != null) {
-                builder.commandTimeout(cluster.getTimeout());
-            }
+            applyClientTimeout(builder, cluster);
             if (topologyRefreshOptions != null) {
                 builder.clientOptions(ClusterClientOptions.builder().topologyRefreshOptions(topologyRefreshOptions).build());
+            }
+            if (readFrom != null) {
+                builder.readFrom(readFrom);
             }
             return new LettuceConnectionFactory(clusterConfig, builder.build());
         } else {
             LettuceClientConfiguration.LettuceClientConfigurationBuilder clientBuilder =
                     LettuceClientConfiguration.builder();
-            if (cluster.getTimeout() != null) {
-                clientBuilder.commandTimeout(cluster.getTimeout());
-            }
+            applyClientTimeout(clientBuilder, cluster);
             if (topologyRefreshOptions != null) {
                 clientBuilder.clientOptions(ClusterClientOptions.builder().topologyRefreshOptions(topologyRefreshOptions).build());
+            }
+            if (readFrom != null) {
+                clientBuilder.readFrom(readFrom);
             }
             return new LettuceConnectionFactory(clusterConfig, clientBuilder.build());
         }
@@ -136,17 +203,19 @@ public class RedisTemplateBuilder {
             GenericObjectPoolConfig<StatefulConnection<?, ?>> poolConfig = buildPoolConfig(pool);
             LettucePoolingClientConfiguration.LettucePoolingClientConfigurationBuilder builder =
                     LettucePoolingClientConfiguration.builder().poolConfig(poolConfig);
-            if (cluster.getTimeout() != null) {
-                builder.commandTimeout(cluster.getTimeout());
-            }
+            applyClientTimeout(builder, cluster);
             return new LettuceConnectionFactory(config, builder.build());
         } else {
             LettuceClientConfiguration.LettuceClientConfigurationBuilder clientBuilder =
                     LettuceClientConfiguration.builder();
-            if (cluster.getTimeout() != null) {
-                clientBuilder.commandTimeout(cluster.getTimeout());
-            }
+            applyClientTimeout(clientBuilder, cluster);
             return new LettuceConnectionFactory(config, clientBuilder.build());
+        }
+    }
+
+    private void applyClientTimeout(LettuceClientConfiguration.LettuceClientConfigurationBuilder builder, MultiRedisProperties.Cluster cluster) {
+        if (cluster.getTimeout() != null) {
+            builder.commandTimeout(cluster.getTimeout());
         }
     }
 

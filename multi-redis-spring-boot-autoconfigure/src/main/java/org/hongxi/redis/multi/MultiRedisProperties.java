@@ -1,5 +1,6 @@
 package org.hongxi.redis.multi;
 
+import io.lettuce.core.ReadFrom;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
@@ -42,19 +43,28 @@ public class MultiRedisProperties {
 
     public static class Cluster {
 
+        private String url;
         private String host = "localhost";
         private int port = 6379;
+        private String username;
         private String password;
         private int database = 0;
         private Duration timeout;
+        private Duration connectTimeout;
         private ClusterConfig cluster = new ClusterConfig();
         private Lettuce lettuce = new Lettuce();
+
+        public String getUrl() { return url; }
+        public void setUrl(String url) { this.url = url; }
 
         public String getHost() { return host; }
         public void setHost(String host) { this.host = host; }
 
         public int getPort() { return port; }
         public void setPort(int port) { this.port = port; }
+
+        public String getUsername() { return username; }
+        public void setUsername(String username) { this.username = username; }
 
         public String getPassword() { return password; }
         public void setPassword(String password) { this.password = password; }
@@ -64,6 +74,9 @@ public class MultiRedisProperties {
 
         public Duration getTimeout() { return timeout; }
         public void setTimeout(Duration timeout) { this.timeout = timeout; }
+
+        public Duration getConnectTimeout() { return connectTimeout; }
+        public void setConnectTimeout(Duration connectTimeout) { this.connectTimeout = connectTimeout; }
 
         public ClusterConfig getCluster() { return cluster; }
         public void setCluster(ClusterConfig cluster) { this.cluster = cluster; }
@@ -86,12 +99,16 @@ public class MultiRedisProperties {
 
         private List<String> nodes;
         private Integer maxRedirects;
+        private ReadFrom readFrom;
 
         public List<String> getNodes() { return nodes; }
         public void setNodes(List<String> nodes) { this.nodes = nodes; }
 
         public Integer getMaxRedirects() { return maxRedirects; }
         public void setMaxRedirects(Integer maxRedirects) { this.maxRedirects = maxRedirects; }
+
+        public ReadFrom getReadFrom() { return readFrom; }
+        public void setReadFrom(ReadFrom readFrom) { this.readFrom = readFrom; }
     }
 
     public static class Lettuce {

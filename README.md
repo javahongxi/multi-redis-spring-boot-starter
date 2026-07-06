@@ -46,7 +46,7 @@ spring:
             nodes: localhost:7011,localhost:7012,localhost:7013
 ```
 
-Optional per-cluster settings: `password`, `database`, `timeout`, `lettuce.pool.*`, `lettuce.cluster.refresh.*`.
+Optional per-cluster settings: `url`, `username`, `password`, `database`, `timeout`, `connect-timeout`, `cluster.read-from` (read from replica, e.g. `REPLICA_PREFERRED`), `lettuce.pool.*`, `lettuce.cluster.refresh.*`.
 
 ### Mode 1 - Builder Pattern
 

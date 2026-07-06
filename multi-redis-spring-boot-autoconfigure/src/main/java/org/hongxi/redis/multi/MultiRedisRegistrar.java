@@ -1,5 +1,7 @@
 package org.hongxi.redis.multi;
 
+import io.lettuce.core.ReadFrom;
+import io.lettuce.core.RedisURI;
 import io.lettuce.core.api.StatefulConnection;
 import io.lettuce.core.cluster.ClusterClientOptions;
 import io.lettuce.core.cluster.ClusterTopologyRefreshOptions;
@@ -161,6 +163,10 @@ public class MultiRedisRegistrar implements ImportBeanDefinitionRegistrar, Envir
                 if (maxRedirects != null) {
                     cc.clusterMaxRedirects = Integer.parseInt(maxRedirects);
                 }
+                String readFrom = environment.getProperty(prefix + "cluster.read-from");
+                if (readFrom != null) {
+                    cc.clusterReadFrom = ReadFrom.valueOf(readFrom.toUpperCase());
+                }
                 // Lettuce cluster refresh config
                 String refreshAdaptive = environment.getProperty(prefix + "lettuce.cluster.refresh.adaptive");
                 if (refreshAdaptive != null) {
@@ -179,10 +185,16 @@ public class MultiRedisRegistrar implements ImportBeanDefinitionRegistrar, Envir
             }
 
             // Common config
+            cc.url = environment.getProperty(prefix + "url");
+            cc.username = environment.getProperty(prefix + "username");
             cc.password = environment.getProperty(prefix + "password");
             String timeoutStr = environment.getProperty(prefix + "timeout");
             if (timeoutStr != null) {
                 cc.timeout = parseDuration(timeoutStr);
+            }
+            String connectTimeoutStr = environment.getProperty(prefix + "connect-timeout");
+            if (connectTimeoutStr != null) {
+                cc.connectTimeout = parseDuration(connectTimeoutStr);
             }
 
             // Pool config
@@ -221,15 +233,34 @@ public class MultiRedisRegistrar implements ImportBeanDefinitionRegistrar, Envir
 
     static LettuceConnectionFactory createConnectionFactory(ClusterConfig config) {
         LettuceConnectionFactory factory;
-        if (config.clusterMode) {
+
+        // URL mode: parse RedisURI and extract connection details
+        if (config.url != null && !config.url.isEmpty()) {
+            RedisURI redisURI = RedisURI.create(config.url);
+            if (config.clusterMode) {
+                // URL + cluster mode: use nodes from config, auth from URL
+                RedisClusterConfiguration clusterConfig = new RedisClusterConfiguration(config.clusterNodes);
+                if (config.clusterMaxRedirects != null) {
+                    clusterConfig.setMaxRedirects(config.clusterMaxRedirects);
+                }
+                applyAuthFromURI(clusterConfig, redisURI, config);
+                factory = createLettuceConnectionFactory(clusterConfig, config);
+            } else {
+                // URL + standalone mode: extract all from URL
+                RedisStandaloneConfiguration redisConfig = new RedisStandaloneConfiguration();
+                redisConfig.setHostName(redisURI.getHost());
+                redisConfig.setPort(redisURI.getPort());
+                redisConfig.setDatabase(redisURI.getDatabase());
+                applyAuthFromURI(redisConfig, redisURI, config);
+                factory = createLettuceConnectionFactory(redisConfig, config);
+            }
+        } else if (config.clusterMode) {
             // Redis Cluster mode
             RedisClusterConfiguration clusterConfig = new RedisClusterConfiguration(config.clusterNodes);
             if (config.clusterMaxRedirects != null) {
                 clusterConfig.setMaxRedirects(config.clusterMaxRedirects);
             }
-            if (config.password != null && !config.password.isEmpty()) {
-                clusterConfig.setPassword(config.password);
-            }
+            applyAuth(clusterConfig, config);
             factory = createLettuceConnectionFactory(clusterConfig, config);
         } else {
             // Standalone mode
@@ -237,13 +268,55 @@ public class MultiRedisRegistrar implements ImportBeanDefinitionRegistrar, Envir
             redisConfig.setHostName(config.host);
             redisConfig.setPort(config.port);
             redisConfig.setDatabase(config.database);
-            if (config.password != null && !config.password.isEmpty()) {
-                redisConfig.setPassword(config.password);
-            }
+            applyAuth(redisConfig, config);
             factory = createLettuceConnectionFactory(redisConfig, config);
         }
         factory.afterPropertiesSet();
         return factory;
+    }
+
+    private static void applyAuth(RedisClusterConfiguration clusterConfig, ClusterConfig config) {
+        if (config.username != null && !config.username.isEmpty()) {
+            clusterConfig.setUsername(config.username);
+        }
+        if (config.password != null && !config.password.isEmpty()) {
+            clusterConfig.setPassword(config.password);
+        }
+    }
+
+    private static void applyAuth(RedisStandaloneConfiguration redisConfig, ClusterConfig config) {
+        if (config.username != null && !config.username.isEmpty()) {
+            redisConfig.setUsername(config.username);
+        }
+        if (config.password != null && !config.password.isEmpty()) {
+            redisConfig.setPassword(config.password);
+        }
+    }
+
+    private static void applyAuthFromURI(RedisClusterConfiguration clusterConfig, RedisURI redisURI, ClusterConfig config) {
+        if (config.username != null) {
+            clusterConfig.setUsername(config.username);
+        } else if (redisURI.getUsername() != null && !redisURI.getUsername().isEmpty()) {
+            clusterConfig.setUsername(redisURI.getUsername());
+        }
+        if (config.password != null && !config.password.isEmpty()) {
+            clusterConfig.setPassword(config.password);
+        } else if (redisURI.getPassword() != null && redisURI.getPassword().length > 0) {
+            clusterConfig.setPassword(new String(redisURI.getPassword()));
+        }
+    }
+
+    private static void applyAuthFromURI(RedisStandaloneConfiguration redisConfig, RedisURI redisURI, ClusterConfig config) {
+        if (config.username != null) {
+            redisConfig.setUsername(config.username);
+        } else if (redisURI.getUsername() != null && !redisURI.getUsername().isEmpty()) {
+            redisConfig.setUsername(redisURI.getUsername());
+        }
+        if (config.password != null && !config.password.isEmpty()) {
+            redisConfig.setPassword(config.password);
+        } else if (redisURI.getPassword() != null && redisURI.getPassword().length > 0) {
+            redisConfig.setPassword(new String(redisURI.getPassword()));
+        }
     }
 
     private static LettuceConnectionFactory createLettuceConnectionFactory(
@@ -255,21 +328,23 @@ public class MultiRedisRegistrar implements ImportBeanDefinitionRegistrar, Envir
             GenericObjectPoolConfig<StatefulConnection<?, ?>> poolConfig = buildPoolConfig(config);
             LettucePoolingClientConfiguration.LettucePoolingClientConfigurationBuilder builder =
                     LettucePoolingClientConfiguration.builder().poolConfig(poolConfig);
-            if (config.timeout != null) {
-                builder.commandTimeout(config.timeout);
-            }
+            applyClientTimeout(builder, config);
             if (topologyRefreshOptions != null) {
                 builder.clientOptions(ClusterClientOptions.builder().topologyRefreshOptions(topologyRefreshOptions).build());
+            }
+            if (config.clusterReadFrom != null) {
+                builder.readFrom(config.clusterReadFrom);
             }
             return new LettuceConnectionFactory(clusterConfig, builder.build());
         } else {
             LettuceClientConfiguration.LettuceClientConfigurationBuilder clientBuilder =
                     LettuceClientConfiguration.builder();
-            if (config.timeout != null) {
-                clientBuilder.commandTimeout(config.timeout);
-            }
+            applyClientTimeout(clientBuilder, config);
             if (topologyRefreshOptions != null) {
                 clientBuilder.clientOptions(ClusterClientOptions.builder().topologyRefreshOptions(topologyRefreshOptions).build());
+            }
+            if (config.clusterReadFrom != null) {
+                clientBuilder.readFrom(config.clusterReadFrom);
             }
             return new LettuceConnectionFactory(clusterConfig, clientBuilder.build());
         }
@@ -281,17 +356,19 @@ public class MultiRedisRegistrar implements ImportBeanDefinitionRegistrar, Envir
             GenericObjectPoolConfig<StatefulConnection<?, ?>> poolConfig = buildPoolConfig(config);
             LettucePoolingClientConfiguration.LettucePoolingClientConfigurationBuilder builder =
                     LettucePoolingClientConfiguration.builder().poolConfig(poolConfig);
-            if (config.timeout != null) {
-                builder.commandTimeout(config.timeout);
-            }
+            applyClientTimeout(builder, config);
             return new LettuceConnectionFactory(redisConfig, builder.build());
         } else {
             LettuceClientConfiguration.LettuceClientConfigurationBuilder clientBuilder =
                     LettuceClientConfiguration.builder();
-            if (config.timeout != null) {
-                clientBuilder.commandTimeout(config.timeout);
-            }
+            applyClientTimeout(clientBuilder, config);
             return new LettuceConnectionFactory(redisConfig, clientBuilder.build());
+        }
+    }
+
+    private static void applyClientTimeout(LettuceClientConfiguration.LettuceClientConfigurationBuilder builder, ClusterConfig config) {
+        if (config.timeout != null) {
+            builder.commandTimeout(config.timeout);
         }
     }
 
@@ -345,13 +422,17 @@ public class MultiRedisRegistrar implements ImportBeanDefinitionRegistrar, Envir
         int database = 0;
 
         // Common
+        String url;
+        String username;
         String password;
         Duration timeout;
+        Duration connectTimeout;
 
         // Cluster mode
         boolean clusterMode = false;
         List<String> clusterNodes;
         Integer clusterMaxRedirects;
+        ReadFrom clusterReadFrom;
         boolean clusterAdaptive = false;
         Duration clusterRefreshPeriod;
 
