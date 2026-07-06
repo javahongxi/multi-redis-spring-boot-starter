@@ -134,12 +134,12 @@ redis-cli -p 6380 shutdown
 Use the provided `redis-cluster.sh` script:
 
 ```bash
-# Start all clusters
-./redis-cluster.sh start all
+# Start all clusters (default, no argument needed)
+./redis-cluster.sh start
 
 # Start specific cluster
-./redis-cluster.sh start cache      # 7001-7003
-./redis-cluster.sh start session    # 7011-7013
+./redis-cluster.sh start cache      # 7001-7006 (3 masters + 3 replicas)
+./redis-cluster.sh start session    # 7011-7016 (3 masters + 3 replicas)
 
 # Check status
 ./redis-cluster.sh status

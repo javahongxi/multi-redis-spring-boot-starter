@@ -4,9 +4,9 @@
 # Usage: ./redis-cluster.sh start|stop|status|restart [cluster_name]
 #
 # Examples:
-#   ./redis-cluster.sh start              # Start default cluster (cache) on 7001-7003
-#   ./redis-cluster.sh start cache        # Start cluster named 'cache' on 7001-7003
-#   ./redis-cluster.sh start session      # Start cluster named 'session' on 7011-7013
+#   ./redis-cluster.sh start              # Start all clusters (cache on 7001-7006, session on 7011-7016)
+#   ./redis-cluster.sh start cache        # Start cluster named 'cache' on 7001-7006
+#   ./redis-cluster.sh start session      # Start cluster named 'session' on 7011-7016
 #   ./redis-cluster.sh stop all           # Stop all clusters
 #
 
@@ -22,8 +22,8 @@ get_ports() {
         name="cache"
     fi
     case "$name" in
-        cache)   echo "7001 7002 7003" ;;
-        session) echo "7011 7012 7013" ;;
+        cache)   echo "7001 7002 7003 7004 7005 7006" ;;
+        session) echo "7011 7012 7013 7014 7015 7016" ;;
         *)       echo "" ;;
     esac
 }
@@ -69,7 +69,7 @@ start_cluster() {
         echo "Creating Redis Cluster '$name'..."
         redis-cli --cluster create \
             "${ports[@]/#/127.0.0.1:}" \
-            --cluster-replicas 0 \
+            --cluster-replicas 1 \
             --cluster-yes
         echo "[OK] Redis Cluster '$name' created"
     else
