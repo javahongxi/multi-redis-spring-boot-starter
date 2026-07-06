@@ -1,0 +1,16 @@
+server:
+  port: 8080
+
+spring:
+  redis:
+    clusters:
+      order:
+        host: localhost
+        port: 6379
+        password:
+        database: 0
+      user:
+        host: localhost
+        port: 6380
+        password:
+        database: 0
