@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit;
  *
  * @author javahongxi
  */
-@Order(4)
+@Order(5)
 @Component
 public class RedissonSampleRunner implements CommandLineRunner {
 

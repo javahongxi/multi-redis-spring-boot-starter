@@ -13,13 +13,16 @@ import org.springframework.context.annotation.Import;
  * <p>
  * <b>Mode 1 - Builder + Annotation</b> (default): Code-controlled approach.
  * <ul>
- *   <li>Inject {@link RedisTemplateBuilder} to create {@code RedisTemplate} instances manually</li>
+ *   <li>Inject {@link RedisTemplateBuilder} to create {@code RedisTemplate}, {@code StringRedisTemplate},
+ *       {@code ReactiveRedisTemplate} and {@code ReactiveStringRedisTemplate} instances manually</li>
  *   <li>Use {@code @RedisCluster("name")} annotation to inject templates directly into fields</li>
  * </ul>
  * <p>
  * <b>Mode 2 - Auto-register</b>: Zero-code approach with YAML configuration.
  * Set {@code spring.data.redis.auto-register=true} to automatically register
- * {@code RedisTemplate} beans for each cluster. Serializers can be configured via YAML.
+ * {@code RedisTemplate}, {@code StringRedisTemplate}, {@code ReactiveRedisTemplate}
+ * and {@code ReactiveStringRedisTemplate} beans for each cluster.
+ * Serializers can be configured via YAML.
  * <p>
  * These two modes are mutually exclusive. Mode 1 is active by default.
  *
