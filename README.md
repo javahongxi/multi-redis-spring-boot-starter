@@ -18,7 +18,7 @@ Spring Boot Starter for connecting to multiple Redis instances/clusters from a s
 - **Mode 2 - Auto-register** (zero-code): auto-register beans with YAML serializer configuration. **Auto-activated** when Redis configuration is detected.
 - Standalone and Redis Cluster mode support
 - **Official Spring Boot Redis configuration format compatibility** — switch from official starter without changing config
-- Automatic exclusion of Spring Boot's default `RedisAutoConfiguration`
+- Automatic exclusion of Spring Boot's default Redis auto-configurations
 
 ## Quick Start
 
@@ -234,8 +234,8 @@ public class OrderService {
 }
 ```
 
-> **Note**: Spring Boot's default `RedisAutoConfiguration` is automatically excluded by 
-> `MultiRedisAutoConfigurationImportFilter` when this starter is on the classpath.
+> **Note**: Spring Boot's default `RedisAutoConfiguration` `RedisReactiveAutoConfiguration` `RedisRepositoriesAutoConfiguration` 
+> is automatically excluded by `MultiRedisAutoConfigurationImportFilter` when this starter is on the classpath.
 
 ## Sample
 
