@@ -6,6 +6,7 @@ import io.lettuce.core.api.StatefulConnection;
 import io.lettuce.core.cluster.ClusterClientOptions;
 import io.lettuce.core.cluster.ClusterTopologyRefreshOptions;
 import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
+import org.springframework.core.env.Environment;
 import org.springframework.data.redis.connection.RedisClusterConfiguration;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
@@ -30,10 +31,12 @@ import java.util.concurrent.ConcurrentHashMap;
 public class RedisTemplateBuilder {
 
     private final MultiRedisProperties properties;
+    private final Environment environment;
     private final Map<String, LettuceConnectionFactory> connectionFactoryCache = new ConcurrentHashMap<>();
 
-    public RedisTemplateBuilder(MultiRedisProperties properties) {
+    public RedisTemplateBuilder(MultiRedisProperties properties, Environment environment) {
         this.properties = properties;
+        this.environment = environment;
     }
 
     /**
@@ -67,7 +70,7 @@ public class RedisTemplateBuilder {
 
     private MultiRedisProperties.Cluster resolveCluster(String clusterName) {
         MultiRedisProperties.Cluster cluster = properties.getClusters().get(clusterName);
-        if (cluster == null && "default".equals(clusterName) && properties.isUsingOfficialFormat()) {
+        if (cluster == null && "default".equals(clusterName) && isUsingOfficialFormat()) {
             cluster = properties.createDefaultClusterFromOfficialFormat();
         }
         return cluster;
@@ -148,7 +151,7 @@ public class RedisTemplateBuilder {
         MultiRedisProperties.Cluster cluster = properties.getClusters().get(clusterName);
         
         // If cluster not found, check if using official format and clusterName is "default"
-        if (cluster == null && "default".equals(clusterName) && properties.isUsingOfficialFormat()) {
+        if (cluster == null && "default".equals(clusterName) && isUsingOfficialFormat()) {
             cluster = properties.createDefaultClusterFromOfficialFormat();
         }
         
@@ -159,6 +162,20 @@ public class RedisTemplateBuilder {
         }
         final MultiRedisProperties.Cluster finalCluster = cluster;
         return connectionFactoryCache.computeIfAbsent(clusterName, name -> createConnectionFactory(finalCluster));
+    }
+
+    /**
+     * Check if official Spring Boot Redis format is explicitly configured.
+     * Uses Environment to detect if properties were explicitly set (even if values match defaults).
+     */
+    private boolean isUsingOfficialFormat() {
+        // Check via Environment for explicit configuration
+        String host = environment.getProperty("spring.data.redis.host");
+        if (host != null) return true;
+        String clusterNodes = environment.getProperty("spring.data.redis.cluster.nodes");
+        if (clusterNodes != null && !clusterNodes.isEmpty()) return true;
+        String url = environment.getProperty("spring.data.redis.url");
+        return url != null && !url.isEmpty();
     }
 
     private LettuceConnectionFactory createConnectionFactory(MultiRedisProperties.Cluster cluster) {

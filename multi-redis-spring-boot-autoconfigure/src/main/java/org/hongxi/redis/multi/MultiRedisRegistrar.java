@@ -75,8 +75,28 @@ public class MultiRedisRegistrar implements ImportBeanDefinitionRegistrar, Envir
     @Override
     public void registerBeanDefinitions(AnnotationMetadata importingClassMetadata,
                                         BeanDefinitionRegistry registry) {
-        String autoRegister = environment.getProperty("spring.data.redis.auto-register", "false");
-        if (!Boolean.parseBoolean(autoRegister)) {
+        // Determine if auto-register should be enabled
+        String autoRegisterProp = environment.getProperty("spring.data.redis.auto-register");
+        boolean autoRegister;
+        if (autoRegisterProp != null) {
+            // User explicitly set the property, respect their choice
+            autoRegister = Boolean.parseBoolean(autoRegisterProp);
+            log.info("[multi-redis] auto-register explicitly set to '{}', {} mode activated",
+                    autoRegisterProp, autoRegister ? "Auto-register" : "Builder");
+        } else {
+            // Auto-detect: enable if official format or multi-cluster format is detected
+            boolean officialFormat = hasOfficialFormatConfig();
+            boolean multiCluster = hasMultiClusterConfig();
+            autoRegister = officialFormat || multiCluster;
+            if (autoRegister) {
+                String detectedFormat = officialFormat ? "official format" : "multi-cluster format";
+                log.info("[multi-redis] Detected {}, auto-register mode activated", detectedFormat);
+            } else {
+                log.info("[multi-redis] No Redis configuration detected, Builder mode activated");
+            }
+        }
+
+        if (!autoRegister) {
             return;
         }
 
@@ -84,6 +104,8 @@ public class MultiRedisRegistrar implements ImportBeanDefinitionRegistrar, Envir
         if (clusters.isEmpty()) {
             return;
         }
+
+        log.info("[multi-redis] Registered {} cluster(s): {}", clusters.size(), clusters.keySet());
 
         for (Map.Entry<String, ClusterConfig> entry : clusters.entrySet()) {
             String clusterName = entry.getKey();
@@ -244,16 +266,53 @@ public class MultiRedisRegistrar implements ImportBeanDefinitionRegistrar, Envir
             clusters.put(clusterName, cc);
         }
 
-        // If no clusters found in multi-redis format, check for official format compatibility
-        if (clusters.isEmpty()) {
+        // Also check for official format and add as 'default' cluster (allows mixed)
+        if (!clusters.containsKey("default")) {
             ClusterConfig defaultCluster = resolveOfficialFormatCluster();
             if (defaultCluster != null) {
                 clusters.put("default", defaultCluster);
-                log.info("[multi-redis] Using official format configuration, created 'default' cluster");
+                log.info("[multi-redis] Official format detected, added 'default' cluster alongside multi-cluster config");
             }
         }
 
         return clusters;
+    }
+
+    /**
+     * Check if official Spring Boot Redis format is configured.
+     * Official format: spring.data.redis.host/port or spring.data.redis.cluster.nodes or spring.data.redis.url
+     */
+    private boolean hasOfficialFormatConfig() {
+        String host = environment.getProperty("spring.data.redis.host");
+        if (host != null) {
+            return true;
+        }
+        String clusterNodes = environment.getProperty("spring.data.redis.cluster.nodes");
+        if (clusterNodes != null && !clusterNodes.isEmpty()) {
+            return true;
+        }
+        String url = environment.getProperty("spring.data.redis.url");
+        return url != null && !url.isEmpty();
+    }
+
+    /**
+     * Check if multi-cluster format is configured.
+     * Multi-cluster format: spring.data.redis.clusters.*
+     */
+    private boolean hasMultiClusterConfig() {
+        if (!(environment instanceof ConfigurableEnvironment ce)) {
+            return false;
+        }
+        for (PropertySource<?> ps : ce.getPropertySources()) {
+            if (ps instanceof EnumerablePropertySource<?> eps) {
+                for (String name : eps.getPropertyNames()) {
+                    if (name.startsWith("spring.data.redis.clusters.")) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -595,7 +654,7 @@ public class MultiRedisRegistrar implements ImportBeanDefinitionRegistrar, Envir
                 .build();
     }
 
-    static class ClusterConfig {
+    public static class ClusterConfig {
         // Standalone mode
         String host = "localhost";
         int port = 6379;

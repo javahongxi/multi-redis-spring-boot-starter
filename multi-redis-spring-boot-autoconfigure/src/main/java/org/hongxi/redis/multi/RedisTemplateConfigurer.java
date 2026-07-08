@@ -1,7 +1,6 @@
 package org.hongxi.redis.multi;
 
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.serializer.RedisSerializer;
 
 /**
@@ -104,18 +103,6 @@ public class RedisTemplateConfigurer<K, V> {
      */
     public RedisTemplate<K, V> build() {
         template.afterPropertiesSet();
-        return template;
-    }
-
-    /**
-     * Get the underlying RedisTemplate without calling afterPropertiesSet().
-     * <p>
-     * Use this if you need to perform additional configuration before initialization.
-     * Remember to call {@code afterPropertiesSet()} manually when done.
-     *
-     * @return the underlying RedisTemplate
-     */
-    public RedisTemplate<K, V> getTemplate() {
         return template;
     }
 }

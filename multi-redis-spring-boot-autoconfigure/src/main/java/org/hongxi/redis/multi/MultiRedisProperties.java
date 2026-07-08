@@ -102,18 +102,16 @@ public class MultiRedisProperties {
     public void setLettuce(Lettuce lettuce) { this.lettuce = lettuce; }
 
     /**
-     * Check if using official format (top-level fields) instead of multi-redis format.
-     * Returns true if 'clusters' is empty but either 'cluster.nodes' or 'host' is configured.
+     * Check if official Spring Boot Redis format is configured.
+     * Returns true if either cluster.nodes or host/port is explicitly set.
+     * This works regardless of whether multi-cluster format is also configured (mixed).
      */
     public boolean isUsingOfficialFormat() {
-        if (clusters != null && !clusters.isEmpty()) {
-            return false;
-        }
-        // Check if cluster mode (official format)
+        // Check if cluster mode (official format): spring.data.redis.cluster.nodes is set
         if (cluster != null && cluster.getNodes() != null && !cluster.getNodes().isEmpty()) {
             return true;
         }
-        // Check if standalone mode (official format) - host is not default
+        // Check if standalone mode (official format): host is not default, or port is not default, or password/url is set
         return !"localhost".equals(host) || port != 6379 || password != null || url != null;
     }
 
