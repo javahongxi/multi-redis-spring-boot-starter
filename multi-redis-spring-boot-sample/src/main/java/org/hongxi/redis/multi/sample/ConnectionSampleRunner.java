@@ -3,8 +3,6 @@ package org.hongxi.redis.multi.sample;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
-import org.springframework.context.ApplicationContext;
-import org.springframework.core.annotation.Order;
 import org.springframework.data.redis.connection.RedisClusterConfiguration;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
@@ -14,64 +12,47 @@ import org.springframework.stereotype.Component;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Properties;
-import java.util.TreeMap;
 
 /**
  * Verifies multi-Redis connectivity on startup (connection and server info only).
- * <p>
- * Dynamically discovers all {@link StringRedisTemplate} beans by naming convention
- * ({@code {clusterName}StringRedisTemplate}), so it works across all test scenarios:
- * official-only, clusters-only, and mixed.
  *
  * @author javahongxi
  */
-@Order(1)
 @Component
 public class ConnectionSampleRunner implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(ConnectionSampleRunner.class);
-    private static final String BEAN_SUFFIX = "StringRedisTemplate";
 
-    private final ApplicationContext applicationContext;
+    private final StringRedisTemplate defaultStringRedisTemplate;
+    private final StringRedisTemplate orderStringRedisTemplate;
+    private final StringRedisTemplate userStringRedisTemplate;
+    private final StringRedisTemplate cacheStringRedisTemplate;
+    private final StringRedisTemplate sessionStringRedisTemplate;
 
-    public ConnectionSampleRunner(ApplicationContext applicationContext) {
-        this.applicationContext = applicationContext;
+    public ConnectionSampleRunner(StringRedisTemplate defaultStringRedisTemplate,
+                                  StringRedisTemplate orderStringRedisTemplate,
+                                  StringRedisTemplate userStringRedisTemplate,
+                                  StringRedisTemplate cacheStringRedisTemplate,
+                                  StringRedisTemplate sessionStringRedisTemplate) {
+        this.defaultStringRedisTemplate = defaultStringRedisTemplate;
+        this.orderStringRedisTemplate = orderStringRedisTemplate;
+        this.userStringRedisTemplate = userStringRedisTemplate;
+        this.cacheStringRedisTemplate = cacheStringRedisTemplate;
+        this.sessionStringRedisTemplate = sessionStringRedisTemplate;
     }
 
     @Override
     public void run(String... args) {
         log.info("");
-        // Discover all StringRedisTemplate beans by naming convention
-        Map<String, StringRedisTemplate> templates = discoverTemplates();
-
         log.info("========== Multi-Redis Connection Verification ==========");
-        log.info("Discovered {} cluster(s): {}", templates.size(), templates.keySet());
 
-        for (Map.Entry<String, StringRedisTemplate> entry : templates.entrySet()) {
-            verifyConnection(entry.getKey(), entry.getValue());
-        }
+        verifyConnection("default", defaultStringRedisTemplate);
+        verifyConnection("order", orderStringRedisTemplate);
+        verifyConnection("user", userStringRedisTemplate);
+        verifyConnection("cache", cacheStringRedisTemplate);
+        verifyConnection("session", sessionStringRedisTemplate);
 
         log.info("========== Connection verification complete ==========");
-    }
-
-    /**
-     * Discover all StringRedisTemplate beans by naming convention.
-     * Bean name pattern: {clusterName}StringRedisTemplate
-     */
-    private Map<String, StringRedisTemplate> discoverTemplates() {
-        Map<String, StringRedisTemplate> result = new TreeMap<>();
-        Map<String, StringRedisTemplate> allBeans = applicationContext.getBeansOfType(StringRedisTemplate.class);
-
-        for (Map.Entry<String, StringRedisTemplate> entry : allBeans.entrySet()) {
-            String beanName = entry.getKey();
-            if (beanName.endsWith(BEAN_SUFFIX)) {
-                String clusterName = beanName.substring(0, beanName.length() - BEAN_SUFFIX.length());
-                if (!clusterName.isEmpty()) {
-                    result.put(clusterName, entry.getValue());
-                }
-            }
-        }
-        return result;
     }
 
     private void verifyConnection(String name, StringRedisTemplate template) {

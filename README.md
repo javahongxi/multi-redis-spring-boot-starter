@@ -5,15 +5,13 @@
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.x-brightgreen.svg)](https://spring.io/projects/spring-boot)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-Spring Boot Starter for connecting to multiple Redis instances/clusters from a single application. Supports two modes: **Mode 1 - Builder + Annotation** (code-controlled) and **Mode 2 - Auto-register** (zero-code with YAML configuration) for creating multiple `RedisTemplate` / `StringRedisTemplate` instances with different cluster configurations.
+Spring Boot Starter for connecting to multiple Redis instances/clusters from a single application. **Auto-register** mode (zero-code with YAML) is the recommended approach — just add the dependency, write YAML config, and inject `RedisTemplate` by name. For advanced scenarios, **Builder mode** provides full programmatic control via `RedisTemplateBuilder`.
 
 ## Features
 
 - Multiple Redis cluster configurations in a single application
-- **Mode 1 - Builder + Annotation** (code-controlled):
-  - Inject `RedisTemplateBuilder` to manually create `RedisTemplate` and `StringRedisTemplate` beans
-  - Use `@RedisCluster("name")` annotation to inject templates directly into fields
-- **Mode 2 - Auto-register** (zero-code): auto-register beans with YAML serializer configuration. **Auto-activated** when Redis configuration is detected.
+- **Auto-register** (zero-code, recommended): auto-register beans with YAML serializer configuration. **Auto-activated** when Redis configuration is detected.
+- **Builder mode** (advanced): inject `RedisTemplateBuilder` for full programmatic control over template creation
 - Standalone and Redis Cluster mode support
 - **Official Spring Boot Redis configuration format compatibility** — switch from official starter without changing config
 - Automatic exclusion of Spring Boot's default Redis auto-configurations
@@ -65,26 +63,30 @@ spring:
 
 Official format (`spring.data.redis.host/port` or `spring.data.redis.cluster.nodes`) also works — auto-detected as the `default` cluster. Both formats can coexist.
 
-> **Note**: `auto-register` is auto-detected. Set `spring.data.redis.auto-register=false` to force Builder mode, or `true` to force Auto-register mode.
+### Usage
 
-### Activation Strategy
+Beans are automatically registered as `{clusterName}RedisTemplate` / `{clusterName}StringRedisTemplate`. Just inject by name:
 
-| Scenario             | Configuration                               | Activated Mode     |
-|----------------------|---------------------------------------------|--------------------|
-| No Redis config      | _(none)_                                    | Builder mode       |
-| Multi-cluster format | `spring.data.redis.clusters.order.host=...` | Auto-register mode |
-| Official standalone  | `spring.data.redis.host=127.0.0.1`          | Auto-register mode |
-| Official cluster     | `spring.data.redis.cluster.nodes=...`       | Auto-register mode |
-| Explicit enable      | `spring.data.redis.auto-register: true`     | Auto-register mode |
-| Explicit disable     | `spring.data.redis.auto-register: false`    | Builder mode       |
+```java
+@Service
+public class OrderService {
 
-> **Priority**: Explicit `auto-register` setting > Auto-detection
+    private final RedisTemplate<String, Object> orderRedisTemplate;
+    private final StringRedisTemplate userStringRedisTemplate;
 
-Optional per-cluster settings: `url`, `username`, `password`, `database`, `timeout`, `connect-timeout`, `cluster.read-from` (read from replica, e.g. `REPLICA_PREFERRED`), `lettuce.pool.*`, `lettuce.cluster.refresh.*`.
+    public OrderService(RedisTemplate<String, Object> orderRedisTemplate,
+                        StringRedisTemplate userStringRedisTemplate) {
+        this.orderRedisTemplate = orderRedisTemplate;
+        this.userStringRedisTemplate = userStringRedisTemplate;
+    }
+}
+```
+
+That's it — no `@Configuration` class, no manual bean definition.
 
 ### YAML Serializer Configuration
 
-Both modes support configuring serializers in YAML (works for `RedisTemplateBuilder` and auto-registered beans):
+Configure serializers per-cluster in YAML:
 
 ```yaml
 spring:
@@ -107,73 +109,64 @@ Supported serializer types:
 - `string` - `StringRedisSerializer`
 - `byteArray` - `ByteArrayRedisSerializer`
 
-### Mode 1 - Builder + Annotation (Code-Controlled)
+Optional per-cluster settings: `url`, `username`, `password`, `database`, `timeout`, `connect-timeout`, `cluster.read-from` (read from replica, e.g. `REPLICA_PREFERRED`), `lettuce.pool.*`, `lettuce.cluster.refresh.*`.
 
-This is the default mode. Use `RedisTemplateBuilder` to manually create beans, or use `@RedisCluster` annotation for direct field injection.
+## Advanced Usage
 
-#### Option A: Builder Pattern
+### Builder Mode (Manual Control)
 
-Manually define `RedisTemplate` and `StringRedisTemplate` beans using `RedisTemplateBuilder`:
+When you need programmatic control (e.g. conditional creation, custom pipeline), inject `RedisTemplateBuilder` to manually define beans. YAML-configured serializers are applied by default — override them programmatically when needed:
 
 ```java
+import org.springframework.data.redis.serializer.RedisSerializer;
+
 @Configuration
 public class RedisConfig {
 
     @Bean
     public RedisTemplate<String, Object> orderRedisTemplate(RedisTemplateBuilder builder) {
-        return builder.cluster("order").build();
+        // Override serializers programmatically
+        return builder.cluster("order")
+                .keySerializer(RedisSerializer.string())
+                .valueSerializer(RedisSerializer.json())
+                .hashKeySerializer(RedisSerializer.string())
+                .hashValueSerializer(RedisSerializer.json())
+                .build();
+    }
+
+    @Bean
+    public RedisTemplate<String, Object> userRedisTemplate(RedisTemplateBuilder builder) {
+        // Use YAML-configured serializers (see YAML Serializer Configuration above)
+        return builder.cluster("user").build();
     }
 
     @Bean
     public StringRedisTemplate orderStringRedisTemplate(RedisTemplateBuilder builder) {
         return builder.stringTemplate("order");
     }
-}
-```
 
-#### Option B: @RedisCluster Annotation
-
-Use `@RedisCluster("name")` annotation to inject `RedisTemplate` instances directly into fields. This is the simplest approach:
-
-```java
-@Service
-public class OrderService {
-
-    @RedisCluster("order") // org.hongxi.redis.multi.annotation.RedisCluster
-    private RedisTemplate<String, Object> orderRedisTemplate;
-
-    @RedisCluster("order")
-    private StringRedisTemplate orderStringRedisTemplate;
-}
-```
-
-When using official Spring Boot Redis configuration format, use `"default"` as the cluster name:
-
-```java
-@RedisCluster("default")
-private RedisTemplate<String, Object> redisTemplate;
-```
-
-> **Note**: `@RedisCluster` annotation only works in Builder mode (Mode 1). It is disabled when Auto-register mode is active.
-
-### Mode 2 - Auto Register (Zero-Code)
-
-Beans are automatically registered as `{clusterName}RedisTemplate` / `{clusterName}StringRedisTemplate`. Just inject directly:
-
-```java
-@Service
-public class OrderService {
-
-    private final RedisTemplate<String, Object> orderRedisTemplate;
-    private final StringRedisTemplate userStringRedisTemplate;
-
-    public OrderService(RedisTemplate<String, Object> orderRedisTemplate,
-                        StringRedisTemplate userStringRedisTemplate) {
-        this.orderRedisTemplate = orderRedisTemplate;
-        this.userStringRedisTemplate = userStringRedisTemplate;
+    @Bean
+    public StringRedisTemplate userStringRedisTemplate(RedisTemplateBuilder builder) {
+        return builder.stringTemplate("user");
     }
 }
 ```
+
+> **Note**: `RedisTemplateBuilder` can be injected into any Spring-managed bean — not just `@Configuration` classes. Use it in `@Service`, `@Component`, or any other bean for maximum flexibility.
+
+### Mode Switching
+
+Auto-register is auto-detected. Set `spring.data.redis.auto-register=false` to force Builder mode, or `true` to force Auto-register mode.
+
+| Scenario             | Configuration                               | Activated Mode     |
+|----------------------|---------------------------------------------|--------------------|
+| Multi-cluster format | `spring.data.redis.clusters.order.host=...` | Auto-register mode |
+| Official standalone  | `spring.data.redis.host=127.0.0.1`          | Auto-register mode |
+| Official cluster     | `spring.data.redis.cluster.nodes=...`       | Auto-register mode |
+| Explicit enable      | `spring.data.redis.auto-register: true`     | Auto-register mode |
+| Explicit disable     | `spring.data.redis.auto-register: false`    | Builder mode       |
+
+> **Priority**: Explicit `auto-register` setting > Auto-detection
 
 ## License
 

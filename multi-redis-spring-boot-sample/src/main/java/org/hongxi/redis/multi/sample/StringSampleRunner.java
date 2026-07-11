@@ -3,63 +3,49 @@ package org.hongxi.redis.multi.sample;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
-import org.springframework.context.ApplicationContext;
-import org.springframework.core.annotation.Order;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
-import java.util.Map;
-import java.util.TreeMap;
-
 /**
  * Verifies multi-Redis read/write operations on startup.
- * <p>
- * Dynamically discovers all {@link StringRedisTemplate} beans by naming convention,
- * so it works across all test scenarios without code changes.
  *
  * @author javahongxi
  */
-@Order(2)
 @Component
 public class StringSampleRunner implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(StringSampleRunner.class);
-    private static final String BEAN_SUFFIX = "StringRedisTemplate";
 
-    private final ApplicationContext applicationContext;
+    private final StringRedisTemplate defaultStringRedisTemplate;
+    private final StringRedisTemplate orderStringRedisTemplate;
+    private final StringRedisTemplate userStringRedisTemplate;
+    private final StringRedisTemplate cacheStringRedisTemplate;
+    private final StringRedisTemplate sessionStringRedisTemplate;
 
-    public StringSampleRunner(ApplicationContext applicationContext) {
-        this.applicationContext = applicationContext;
+    public StringSampleRunner(StringRedisTemplate defaultStringRedisTemplate,
+                              StringRedisTemplate orderStringRedisTemplate,
+                              StringRedisTemplate userStringRedisTemplate,
+                              StringRedisTemplate cacheStringRedisTemplate,
+                              StringRedisTemplate sessionStringRedisTemplate) {
+        this.defaultStringRedisTemplate = defaultStringRedisTemplate;
+        this.orderStringRedisTemplate = orderStringRedisTemplate;
+        this.userStringRedisTemplate = userStringRedisTemplate;
+        this.cacheStringRedisTemplate = cacheStringRedisTemplate;
+        this.sessionStringRedisTemplate = sessionStringRedisTemplate;
     }
 
     @Override
     public void run(String... args) {
         log.info("");
-        Map<String, StringRedisTemplate> templates = discoverTemplates();
-
         log.info("========== Multi-Redis Read/Write Verification ==========");
 
-        for (Map.Entry<String, StringRedisTemplate> entry : templates.entrySet()) {
-            verifyStringReadWrite(entry.getKey(), entry.getValue());
-        }
+        verifyStringReadWrite("default", defaultStringRedisTemplate);
+        verifyStringReadWrite("order", orderStringRedisTemplate);
+        verifyStringReadWrite("user", userStringRedisTemplate);
+        verifyStringReadWrite("cache", cacheStringRedisTemplate);
+        verifyStringReadWrite("session", sessionStringRedisTemplate);
 
         log.info("========== All read/write verifications passed! ==========");
-    }
-
-    private Map<String, StringRedisTemplate> discoverTemplates() {
-        Map<String, StringRedisTemplate> result = new TreeMap<>();
-        Map<String, StringRedisTemplate> allBeans = applicationContext.getBeansOfType(StringRedisTemplate.class);
-
-        for (Map.Entry<String, StringRedisTemplate> entry : allBeans.entrySet()) {
-            String beanName = entry.getKey();
-            if (beanName.endsWith(BEAN_SUFFIX)) {
-                String clusterName = beanName.substring(0, beanName.length() - BEAN_SUFFIX.length());
-                if (!clusterName.isEmpty()) {
-                    result.put(clusterName, entry.getValue());
-                }
-            }
-        }
-        return result;
     }
 
     private void verifyStringReadWrite(String name, StringRedisTemplate template) {
